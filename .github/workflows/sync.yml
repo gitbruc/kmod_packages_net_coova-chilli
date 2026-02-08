@@ -1,0 +1,50 @@
+name: Sync Fork
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天凌晨 00:00 UTC 时间同步一次，可以自行调整
+  workflow_dispatch: # 允许手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+        with:
+          fetch-depth: 0 # 获取完整历史记录，否则可能导致同步冲突
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          
+      - name: Sync with upstream repository
+        run: |
+          git remote add upstream https://github.com/sbwml/kmod_packages_net_coova-chilli
+          git fetch upstream
+          git merge upstream/main
+          git push
+
+      - name: Keepalive Workflow
+        run: |
+          # 计算距离上次提交过去了多少天
+          last_commit=$(git log -1 --format=%ct)
+          now=$(date +%s)
+          days=$(( ($now - $last_commit) / 86400 ))
+          
+          echo "距离上次提交已过去 $days 天"
+          
+          # 如果超过 50 天没有新提交，就创建一个空提交
+          if [ "$days" -gt 50 ]; then
+            echo "仓库长时间未更新，正在创建保活提交..."
+            git config --global user.email "actions@github.com"
+            git config --global user.name "GitHub Actions"
+            git commit --allow-empty -m "Auto-commit to keep workflow active"
+            git push
+          else
+            echo "仓库依然活跃，无需操作。"
+          fi
